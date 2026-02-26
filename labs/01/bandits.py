@@ -3,6 +3,8 @@ import argparse
 
 import numpy as np
 
+import random
+
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--alpha", default=0, type=float, help="Learning rate to use or 0 for averaging.")
@@ -36,13 +38,15 @@ class MultiArmedBandits():
 
 def main(env: MultiArmedBandits, args: argparse.Namespace) -> float:
     # TODO: Initialize the estimates for all bandits, to `args.initial`.
-    ...
+    estimates = [args.initial] * args.bandits
+    num_of_selctions = [0] * args.bandits  # For averaging, count the number of selctinos
 
     rewards = 0
     for step in range(args.episode_length):
         # TODO: Select either a greedy action (if `env.greedy(args.epsilon)` is True)
         # or uniformly random action (otherwise).
-        action = ...
+        action = get_action(is_greedy=env.greedy(args.epsilon), estimates=estimates)
+        num_of_selctions[action] += 1
 
         # Perform the action.
         reward = env.step(action)
@@ -50,9 +54,20 @@ def main(env: MultiArmedBandits, args: argparse.Namespace) -> float:
 
         # TODO: Update parameters, either using averaging (when `args.alpha` == 0)
         # or by an update with a learning rate of `args.alpha`.
-        ...
+        if args.alpha == 0:
+            estimates[action] += (reward - estimates[action]) / num_of_selctions[action]
+        else:
+            estimates[action] += (reward - estimates[action]) * args.alpha
 
     return rewards / args.episode_length
+
+def get_action(is_greedy, estimates):
+    if is_greedy:
+        max_val = max(estimates)
+        max_indices = [i for i, x in enumerate(estimates) if x == max_val]
+        return random.choice(max_indices)  # Breaking ties randomly
+    else:
+        return random.randint(0, len(estimates) - 1)
 
 
 if __name__ == "__main__":
