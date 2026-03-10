@@ -62,6 +62,31 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # in unacceptable error. During the policy improvement, use the
     # `argmax_with_tolerance` to choose the best action.
 
+    for step in range(args.steps):
+        # Preparing the linear system
+        P_pi = np.zeros([GridWorld.states, GridWorld.states])
+        r_pi = np.zeros(GridWorld.states)
+
+        for state in range(GridWorld.states):
+            for prob, reward, new_state in GridWorld.step(state, policy[state]):
+                P_pi[state, new_state] += prob
+                r_pi[state] += prob * reward
+
+        # Policy Evaluation
+        A = np.identity(GridWorld.states) - args.gamma * P_pi
+        b = r_pi
+        value_function = np.asarray(np.linalg.solve(A, b))
+
+        # Policy Improvment
+        policy_stable = True
+        for s in range(GridWorld.states):
+            q = np.zeros(GridWorld.actions)
+            for a in range(GridWorld.actions):
+                for prob, reward, new_state in GridWorld.step(s, a):
+                    q[a] += prob * (reward + args.gamma * value_function[new_state])
+                
+            policy[s] = argmax_with_tolerance(q)
+
     # TODO: The final value function should be in `value_function` and final greedy policy in `policy`.
     return value_function, policy
 
