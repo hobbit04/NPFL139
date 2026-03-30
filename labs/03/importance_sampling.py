@@ -39,6 +39,18 @@ def main(args: argparse.Namespace) -> np.ndarray:
             state = next_state
 
         # TODO: Update V using weighted importance sampling.
+        W = 1
+        G = 0
+        for s, a, r in reversed(episode):
+            G += r
+            
+            W *= 2 if (a == 1 or a == 2) else 0
+            if not W:
+                break  # Once it becomes zero, W would be zero for the rest of the iteration
+
+            C[s] += W   
+            V[s] += (W / C[s]) * (G - V[s])
+
 
     return V
 

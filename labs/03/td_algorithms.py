@@ -56,12 +56,27 @@ def main(args: argparse.Namespace) -> np.ndarray:
 
         # Generate episode and update Q using the given TD method
         next_action, next_action_prob = choose_next_action(Q)
+
+        # Buffer for n-step method
+        states = [next_state]
+        actions = [next_action]
+        rewards = [0]  # First element of this list will not be used. (There is no R_0)
+        action_probs = [next_action_prob]
+        T = float("inf")
+        t = 0
         while not done:
             action, action_prob, state = next_action, next_action_prob, next_state
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
+            states.append(next_state)
+            rewards.append(reward)  
             if not done:
                 next_action, next_action_prob = choose_next_action(Q)
+                
+                actions.append(next_action)
+                action_probs.append(next_action_prob)
+            else:
+                T = t + 1
 
             # TODO: Perform the update to the state-action value function `Q`, using
             # a TD update with the following parameters:
@@ -90,6 +105,97 @@ def main(args: argparse.Namespace) -> np.ndarray:
             # the updates in the order in which you encountered the state-action
             # pairs and during these updates, use the `compute_target_policy(Q)`
             # with the up-to-date value of `Q`.
+            tau = t - args.n + 1
+            if tau >= 0:
+                rho = 1.0
+                if args.off_policy:
+                    rho_end = tau + args.n
+                    if args.mode == "sarsa":
+                        rho_end += 1
+                    for i in range(tau + 1, min(rho_end, T)):
+                        target_prob = compute_target_policy(Q)[states[i], actions[i]]
+                        rho *= (target_prob / action_probs[i])
+
+                G = 0.0
+                if args.mode != "tree_backup":
+                    for i in range(tau + 1, min(tau + args.n, T) + 1):
+                        G += args.gamma ** (i - tau - 1) * rewards[i]
+                    if tau + args.n < T:
+                        if args.mode == "sarsa":
+                            G += args.gamma ** args.n * Q[states[tau + args.n], actions[tau + args.n]]
+                        elif args.mode == "expected_sarsa":
+                            end_state = states[tau + args.n]
+                            target_probs = compute_target_policy(Q)[end_state]
+                            expected_q = np.sum(target_probs * Q[end_state])
+                            G += (args.gamma ** args.n) * expected_q
+
+                    error = G - Q[states[tau], actions[tau]]
+                    Q[states[tau], actions[tau]] += args.alpha * rho * error
+                else:  # mode == "tree_backup"
+                    end_t = min(tau + args.n, T)
+                    if end_t == T:
+                        G = rewards[T]
+                    else:
+                        G = rewards[end_t]
+                        end_state = states[end_t]
+                        target_probs = compute_target_policy(Q)[end_state]
+                        expected_q = np.sum(target_probs * Q[end_state])
+                        G += args.gamma * expected_q
+                    for k in range(end_t - 1, tau, -1):  # Loop backward
+                        target_probs = compute_target_policy(Q)[states[k]]
+                        temp = target_probs[actions[k]]
+                        target_probs[actions[k]] = 0
+                        expected_q = np.sum(target_probs * Q[states[k]])
+                        G = rewards[k] + args.gamma * expected_q + args.gamma * temp * G
+
+                    error = G - Q[states[tau], actions[tau]]
+                    Q[states[tau], actions[tau]] += args.alpha * error
+            t += 1
+
+        # After done = True, handle the rest of the (s, a, r) in episode
+        for tau in range(max(0, T - args.n + 1), T):
+            rho = 1.0
+            if args.off_policy:
+                for i in range(tau + 1, min(tau + args.n + 1, T)):
+                    target_prob = compute_target_policy(Q)[states[i], actions[i]]
+                    rho *= (target_prob / action_probs[i])
+                    
+            G = 0.0
+            for i in range(tau + 1, min(tau + args.n, T) + 1):
+                G += (args.gamma ** (i - tau - 1)) * rewards[i]
+            
+            if args.mode != "tree_backup":
+                if tau + args.n < T:
+                    if args.mode == "sarsa":
+                        G += args.gamma ** args.n * Q[states[tau + args.n], actions[tau + args.n]]
+                    elif args.mode == "expected_sarsa":
+                        end_state = states[tau + args.n]
+                        target_probs = compute_target_policy(Q)[end_state]
+                        expected_q = np.sum(target_probs * Q[end_state])
+                        G += (args.gamma ** args.n) * expected_q
+
+                error = G - Q[states[tau], actions[tau]]
+                Q[states[tau], actions[tau]] += args.alpha * rho * error
+
+            else:  # mode == "tree_backup"
+                end_t = min(tau + args.n, T)
+                if end_t == T:
+                    G = rewards[T]
+                else:
+                    G = rewards[end_t]
+                    end_state = states[end_t]
+                    target_probs = compute_target_policy(Q)[end_state]
+                    expected_q = np.sum(target_probs * Q[end_state])
+                    G += args.gamma * expected_q
+                for k in range(end_t - 1, tau, -1):  # Loop backward
+                    target_probs = compute_target_policy(Q)[states[k]]
+                    temp = target_probs[actions[k]]
+                    target_probs[actions[k]] = 0
+                    expected_q = np.sum(target_probs * Q[states[k]])
+                    G = rewards[k] + args.gamma * expected_q + args.gamma * temp * G
+
+                error = G - Q[states[tau], actions[tau]]
+                Q[states[tau], actions[tau]] += args.alpha * error
 
     # Return the final action-value function for ReCodEx to validate.
     return Q
