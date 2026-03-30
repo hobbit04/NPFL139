@@ -3,7 +3,11 @@
 #### Slides: https://ufal.mff.cuni.cz/~straka/courses/npfl139/2526/slides/?04
 #### Reading: https://ufal.mff.cuni.cz/~straka/courses/npfl139/2526/slides.pdf/npfl139-2526-04.pdf, PDF Slides
 #### Video: https://lectures.ms.mff.cuni.cz/video/rec/npfl139/2526/npfl139-2526-04.mp4, Lecture
+#### Video: https://lectures.ms.mff.cuni.cz/video/rec/npfl139/2526/npfl139-2526-04.practicals.mp4, Practicals
 #### Questions: #lecture_4_questions
+#### Lecture assignment: q_learning_tiles
+#### Lecture assignment: q_network
+#### Lecture assignment: car_racing
 
 - Function approximation [Sections 9-9.3 of RLB]
 - Tile coding [Section 9.5.4 of RLB]
