@@ -31,7 +31,8 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
 
         # TODO: Create data structures for priorities. To avoid precision loss, represent
         # the priorities using 64-bit floats.
-        ...
+        self._tree = np.zeros(2 * max_length, dtype=np.float64)
+        self._max_priority = 1.0
 
     def __len__(self) -> int:
         """Return the number of items in the replay buffer."""
@@ -95,7 +96,18 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
         """
         assert 0 <= index < self._len
         # TODO: Store the priority and perform required updates.
-        ...
+        if priority is None:
+            priority = self._max_priority
+        else:
+            self._max_priority = max(self._max_priority, priority)
+
+        tree_idx = index + self._max_length
+        delta = priority - self._tree[tree_idx]
+
+        while tree_idx > 0:
+            self._tree[tree_idx] += delta
+            tree_idx //= 2
+
 
     def sample(self, size: int, generator=np.random) -> tuple[NamedTuple, np.ndarray, np.ndarray]:
         """Sample a batch of items from the replay buffer.
@@ -109,14 +121,27 @@ class PrioritizedReplayBuffer(Generic[NamedTuple]):
           A triple containing the sampled items, their indices, and their (normalized) probabilities.
         """
         samples = (generator.uniform(size=size) + np.arange(size)) / size
+        
+        targets = samples * self._tree[1]
+        
+        tree_indices = np.ones(size, dtype=np.int32)
+
+        # Vectorized $O(\log N)$ Tree Traversal
+        while tree_indices[0] < self._max_length:
+            left_children = 2 * tree_indices
+            go_right = targets >= self._tree[left_children]
+            
+            tree_indices = left_children + go_right
+            
+            targets -= self._tree[left_children] * go_right
 
         # TODO: Generate the sampled items so that the i-th sampled item fulfills:
         # - the sum of probabilities of items preceding the sampled item in the buffer is <= samples[i],
         # - the sum of probabilities of the above items plus the sampled item is > samples[i].
-        indices: np.ndarray = ...
+        indices: np.ndarray = tree_indices - self._max_length
 
         # TODO: Compute the probabilities of the selected indices.
-        probabilities: np.ndarray = ...
+        probabilities: np.ndarray = self._tree[tree_indices] / self._tree[1]
 
         return self[indices], indices, probabilities
 
