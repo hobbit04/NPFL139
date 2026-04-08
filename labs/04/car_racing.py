@@ -115,8 +115,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         network.load(model_path)
         # Final evaluation
         while True:
-            state, info = env.reset(options={"start_evaluation": True})
-            done = False
             while not done:
                 # TODO: Choose a greedy action
                 q_values = network.predict(np.expand_dims(state, axis=0))
