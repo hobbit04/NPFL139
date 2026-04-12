@@ -173,7 +173,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        if returns.mean() > 275:
+        if sum(returns) / len(returns) > 275:
             training = False
 
     # Save the agent
