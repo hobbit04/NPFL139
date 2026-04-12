@@ -28,9 +28,9 @@ parser.add_argument("--model_path", default="paac_actor.pt", type=str, help="Pat
 
 
 class Agent:
-    device = torch.device("cpu")
+    # device = torch.device("cpu")
     # Use the following line instead to use GPU if available.
-    # device = torch.device(torch.accelerator.current_accelerator() if torch.accelerator.is_available() else "cpu")
+    device = torch.device(torch.accelerator.current_accelerator() if torch.accelerator.is_available() else "cpu")
 
     def __init__(self, env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # TODO: Similarly to reinforce with baseline, define two components:
