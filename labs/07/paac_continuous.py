@@ -26,9 +26,6 @@ parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of 
 parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
 parser.add_argument("--tiles", default=8, type=int, help="Tiles to use.")
 
-class Exp(torch.nn.Module):
-    def forward(self, x):
-        return torch.exp(x)
 
 class Agent:
     # Use GPU if available.
@@ -70,7 +67,7 @@ class Agent:
             torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
-            Exp(),
+            torch.nn.Softplus(),
         ).to(self.device)
 
         self._critic = torch.nn.Sequential(
@@ -97,7 +94,7 @@ class Agent:
         # the computed `mus` and `sds`.
         #
         mus = self._actor_mus(states)
-        sds = self._actor_sds(states)
+        sds = self._actor_sds(states) + 0.3
         action_distribution = torch.distributions.Normal(mus, sds)
         # TODO: Train the actor using the sum of the following two losses:
         # - REINFORCE loss, i.e., the negative log likelihood of the `actions` in the
