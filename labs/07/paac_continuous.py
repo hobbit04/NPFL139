@@ -58,20 +58,20 @@ class Agent:
         num_tiles = int(env.observation_space.nvec.max())
 
         self._actor_mus = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
             torch.nn.Tanh(),
         ).to(self.device)
         self._actor_sds = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
             torch.nn.Softplus(),
         ).to(self.device)
 
         self._critic = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(1),
         ).to(self.device)
