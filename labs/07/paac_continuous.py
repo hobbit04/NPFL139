@@ -58,20 +58,21 @@ class Agent:
         num_tiles = int(env.observation_space.nvec.max())
 
         self._actor_mus = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
             torch.nn.Tanh(),
         ).to(self.device)
         self._actor_sds = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
             torch.nn.Softplus(),
         ).to(self.device)
 
         self._critic = torch.nn.Sequential(
-            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),            torch.nn.ReLU(),
+            torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="mean"),
+            torch.nn.ReLU(),
             torch.nn.LazyLinear(1),
         ).to(self.device)
 
@@ -110,6 +111,7 @@ class Agent:
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self._critic.parameters(), max_norm=0.5)
         self.critic_optimizer.step()
 
         with torch.no_grad():
@@ -127,6 +129,10 @@ class Agent:
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            itertools.chain(self._actor_mus.parameters(), self._actor_sds.parameters()),
+            max_norm=0.5
+        )
         self.actor_optimizer.step() 
 
 
