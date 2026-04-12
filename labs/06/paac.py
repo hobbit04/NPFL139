@@ -45,12 +45,12 @@ class Agent:
             torch.nn.Linear(env.observation_space.shape[0], args.hidden_layer_size),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(env.action_space.n),
-        )
+        ).to(self.device)
         self._critic = torch.nn.Sequential(
             torch.nn.Linear(env.observation_space.shape[0], args.hidden_layer_size),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(1),
-        )
+        ).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self._actor.parameters(), lr=args.learning_rate)
         self.critic_optimizer = torch.optim.Adam(self._critic.parameters(), lr=args.learning_rate)
 
