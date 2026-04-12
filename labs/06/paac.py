@@ -22,7 +22,7 @@ parser.add_argument("--envs", default=32, type=int, help="Number of parallel env
 parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of batches.")
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--hidden_layer_size", default=32, type=int, help="Size of hidden layer.")
+parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="paac_actor.pt", type=str, help="Path to the actor model.")
 
