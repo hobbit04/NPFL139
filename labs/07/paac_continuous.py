@@ -26,6 +26,9 @@ parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of 
 parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
 parser.add_argument("--tiles", default=8, type=int, help="Tiles to use.")
 
+class Exp(torch.nn.Module):
+    def forward(self, x):
+        return torch.exp(x)
 
 class Agent:
     # Use GPU if available.
@@ -67,7 +70,7 @@ class Agent:
             torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(actions),
-            torch.nn.Softplus(),
+            Exp(),
         ).to(self.device)
 
         self._critic = torch.nn.Sequential(
