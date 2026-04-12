@@ -201,7 +201,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        if np.mean(returns) > 260:
+        if np.mean(returns) > 90:
             training = False
     # Final evaluation
     while True:
