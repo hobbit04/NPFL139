@@ -17,14 +17,14 @@ parser.add_argument("--render_each", default=0, type=int, help="Render some epis
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--entropy_regularization", default=0.01, type=float, help="Entropy regularization weight.")
-parser.add_argument("--envs", default=32, type=int, help="Number of parallel environments.")
+parser.add_argument("--entropy_regularization", default=0.1, type=float, help="Entropy regularization weight.")
+parser.add_argument("--envs", default=64, type=int, help="Number of parallel environments.")
 parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each number of batches.")
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
-parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
+parser.add_argument("--gamma", default=1.0, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
-parser.add_argument("--tiles", default=8, type=int, help="Tiles to use.")
+parser.add_argument("--learning_rate", default=5e-4, type=float, help="Learning rate.")
+parser.add_argument("--tiles", default=32, type=int, help="Tiles to use.")
 
 
 class Agent:
