@@ -17,14 +17,14 @@ parser.add_argument("--render_each", default=0, type=int, help="Render some epis
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--entropy_regularization", default=0.1, type=float, help="Entropy regularization weight.")
-parser.add_argument("--envs", default=64, type=int, help="Number of parallel environments.")
+parser.add_argument("--entropy_regularization", default=1.0, type=float, help="Entropy regularization weight.")
+parser.add_argument("--envs", default=16, type=int, help="Number of parallel environments.")
 parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each number of batches.")
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
-parser.add_argument("--gamma", default=1.0, type=float, help="Discounting factor.")
+parser.add_argument("--gamma", default=0.999, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=128, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=5e-4, type=float, help="Learning rate.")
-parser.add_argument("--tiles", default=32, type=int, help="Tiles to use.")
+parser.add_argument("--tiles", default=16, type=int, help="Tiles to use.")
 
 
 class Agent:
@@ -56,7 +56,7 @@ class Agent:
         actions = env.action_space.shape[0]
         self.args = args
         num_tiles = int(env.observation_space.nvec.max())
-
+        self.coef = args.entropy_regularization
         self._actor_mus = torch.nn.Sequential(
             torch.nn.EmbeddingBag(num_tiles, args.hidden_layer_size, mode="sum"),
             torch.nn.ReLU(),
@@ -76,8 +76,6 @@ class Agent:
             torch.nn.LazyLinear(1),
         ).to(self.device)
 
-        # self.actor_mus_optimizer = torch.optim.Adam(self._actor_mus.parameters(), lr=args.learning_rate)
-        # self.actor_sds_optimizer = torch.optim.Adam(self._actor_sds.parameters(), lr=args.learning_rate)
         self.actor_optimizer = torch.optim.Adam(
             itertools.chain(self._actor_mus.parameters(), self._actor_sds.parameters()),
             lr=args.learning_rate,
@@ -93,8 +91,13 @@ class Agent:
         # Then create `action_distribution` using `torch.distributions.Normal` class and
         # the computed `mus` and `sds`.
         #
+
+        self.coef *= 0.999
+        self.coef = max(self.coef, 0.01)
+
+
         mus = self._actor_mus(states)
-        sds = self._actor_sds(states) + 0.3
+        sds = self._actor_sds(states)
         action_distribution = torch.distributions.Normal(mus, sds)
         # TODO: Train the actor using the sum of the following two losses:
         # - REINFORCE loss, i.e., the negative log likelihood of the `actions` in the
@@ -123,7 +126,7 @@ class Agent:
 
         # Entropy bonus 
         entropy = action_distribution.entropy().sum(dim=-1) 
-        entropy_loss = -self.args.entropy_regularization * entropy.mean()
+        entropy_loss = - self.coef * entropy.mean()
 
         actor_loss = reinforce_loss + entropy_loss
 
@@ -131,7 +134,7 @@ class Agent:
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(
             itertools.chain(self._actor_mus.parameters(), self._actor_sds.parameters()),
-            max_norm=0.5
+            max_norm=0.7
         )
         self.actor_optimizer.step() 
 
@@ -149,7 +152,7 @@ class Agent:
     def predict_values(self, states: torch.Tensor) -> np.ndarray:
         # TODO: Return predicted state-action values.
         with torch.no_grad():
-            values = self._critic(states)
+            values = self._critic(states).squeeze(-1)
         return values
 
 def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
@@ -198,16 +201,15 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             # TODO(paac): Compute estimates of returns by one-step bootstrapping
             next_values = agent.predict_values(next_states)
             returns = rewards + args.gamma * next_values * (1 - dones.astype(np.float32))
-
+            
             # TODO(paac): Train agent using current states, chosen actions and estimated returns.
             agent.train(states, actions, returns)
-
-
             states = next_states
 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        if np.mean(returns) > 90:
+        
+        if np.mean(returns) > 91:
             training = False
     # Final evaluation
     while True:
