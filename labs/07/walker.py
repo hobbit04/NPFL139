@@ -138,7 +138,6 @@ class Agent:
     @npfl139.typed_torch_function(device, torch.float32)
     def predict_mean_actions(self, states: torch.Tensor) -> np.ndarray:
         # Return predicted actions.
-        states /= self._observation_divisor or 1
         with torch.no_grad():
             return self._actor(states, sample=False)[0]
 
@@ -146,7 +145,6 @@ class Agent:
     @npfl139.typed_torch_function(device, torch.float32)
     def predict_sampled_actions(self, states: torch.Tensor) -> np.ndarray:
         # Return sampled actions from the predicted distribution
-        states /= self._observation_divisor or 1
         with torch.no_grad():
             return self._actor(states, sample=True)[0]
 
