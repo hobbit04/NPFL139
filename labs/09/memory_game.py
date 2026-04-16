@@ -19,9 +19,9 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 parser.add_argument("--batch_size", default=..., type=int, help="Number of episodes to train on.")
 parser.add_argument("--evaluate_each", default=..., type=int, help="Evaluate each number of episodes.")
 parser.add_argument("--evaluate_for", default=..., type=int, help="Evaluate for number of episodes.")
-parser.add_argument("--hidden_layer", default=..., type=int, help="Hidden layer size; default 8*`cards`")
-parser.add_argument("--memory_cells", default=..., type=int, help="Number of memory cells; default 2*`cards`")
-parser.add_argument("--memory_cell_size", default=..., type=int, help="Memory cell size; default 3/2*`cards`")
+parser.add_argument("--hidden_layer", default=None, type=int, help="Hidden layer size; default 8*`cards`")
+parser.add_argument("--memory_cells", default=None, type=int, help="Number of memory cells; default 2*`cards`")
+parser.add_argument("--memory_cell_size", default=None, type=int, help="Memory cell size; default 3/2*`cards`")
 
 
 class Agent:

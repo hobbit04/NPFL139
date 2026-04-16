@@ -21,9 +21,9 @@ parser.add_argument("--gradient_clipping", default=1.0, type=float, help="Gradie
 parser.add_argument("--entropy_regularization", default=0.1, type=float, help="Entropy regularization weight.")
 parser.add_argument("--evaluate_each", default=..., type=int, help="Evaluate each number of episodes.")
 parser.add_argument("--evaluate_for", default=..., type=int, help="Evaluate for number of episodes.")
-parser.add_argument("--hidden_layer", default=..., type=int, help="Hidden layer size; default 8*`cards`")
-parser.add_argument("--memory_cells", default=..., type=int, help="Number of memory cells; default 2*`cards`")
-parser.add_argument("--memory_cell_size", default=..., type=int, help="Memory cell size; default 3/2*`cards`")
+parser.add_argument("--hidden_layer", default=None, type=int, help="Hidden layer size; default 8*`cards`")
+parser.add_argument("--memory_cells", default=None, type=int, help="Number of memory cells; default 2*`cards`")
+parser.add_argument("--memory_cell_size", default=None, type=int, help="Memory cell size; default 3/2*`cards`")
 
 
 class Agent:
