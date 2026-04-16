@@ -143,7 +143,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     training = True
     while training:
         # Generate required number of episodes
-        for _ in range(args.evaluate_each):
+        for _ in range(args.evaluate_each // args.batch_size):
             episodes = []
             for _ in range(args.batch_size):
                 state, memory, episode, done = env.reset()[0], agent.zero_memory(), [], False
