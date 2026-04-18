@@ -65,7 +65,7 @@ class Agent:
                 self.mus_layer = torch.nn.Linear(hidden_layer_size, env.action_space.shape[0])
                 
                 self.sds_layer = torch.nn.Sequential(
-                    torch.nn.LazyLinear(env.action_space.shape[0]),
+                    torch.nn.Linear(hidden_layer_size, env.action_space.shape[0]),
                     Exp(),
                 )
                 
