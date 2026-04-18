@@ -114,20 +114,20 @@ class Agent:
                 # Do not forget to support computation without sampling (`sample==False`). You
                 # can return for example `torch.tanh(mus) * self.action_scale + self.action_offset`,
                 # or you can use for example `sds=1e-7`.
-                self.transform = T.ComposeTransform(
+                transform = T.ComposeTransform(
                     [T.TanhTransform(cache_size=1),
                     T.AffineTransform(self.action_offset, self.action_scale, cache_size=1)],
                     cache_size=1,
                 )
                 hidden_states = self.model(inputs)
-                hidden_states += self.layer2(hidden_states)
-                hidden_states += self.layer3(hidden_states)
+                hidden_states = hidden_states + self.layer2(hidden_states)
+                hidden_states = hidden_states + self.layer3(hidden_states)
 
                 mus = self.mus_layer(hidden_states)
                 sds = self.sds_layer(hidden_states)
                 action_dist = torch.distributions.Normal(mus, sds)
                 action_dist = torch.distributions.TransformedDistribution(
-                    action_dist, self.transform
+                    action_dist, transform
                 )
                 if sample:
                     actions = action_dist.rsample()
