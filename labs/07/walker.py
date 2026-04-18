@@ -22,14 +22,14 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
-parser.add_argument("--envs", default=8, type=int, help="Environments.")
-parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
+parser.add_argument("--envs", default=16, type=int, help="Environments.")
+parser.add_argument("--evaluate_each", default=2000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-parser.add_argument("--hidden_layer_size", default=256, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
+parser.add_argument("--hidden_layer_size", default=512, type=int, help="Size of hidden layer.")
+parser.add_argument("--learning_rate", default=3e-4, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="walker.pt", type=str, help="Model path")
-parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
+parser.add_argument("--replay_buffer_size", default=2_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
 parser.add_argument("--target_tau", default=0.005, type=float, help="Target network update weight.")
 
@@ -52,14 +52,17 @@ class Agent:
                 # - a layer for generating sds with `env.action_space.shape[0]` units and `torch.exp` activation
                 self.model = torch.nn.Sequential(
                     torch.nn.Linear(env.observation_space.shape[0], hidden_layer_size),
+                    torch.nn.LayerNorm(hidden_layer_size),
                     torch.nn.ReLU(),
                 )
                 self.layer2 = torch.nn.Sequential(
                     torch.nn.Linear(hidden_layer_size, hidden_layer_size),
+                    torch.nn.LayerNorm(hidden_layer_size),
                     torch.nn.ReLU(),
                 )
                 self.layer3 = torch.nn.Sequential(
                     torch.nn.Linear(hidden_layer_size, hidden_layer_size),
+                    torch.nn.LayerNorm(hidden_layer_size),
                     torch.nn.ReLU(),
                 )
                 self.mus_layer = torch.nn.Linear(hidden_layer_size, env.action_space.shape[0])
