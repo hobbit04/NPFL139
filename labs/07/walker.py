@@ -71,11 +71,7 @@ class Agent:
                 self.register_buffer("action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2))
                 self.register_buffer("action_offset", torch.tensor((env.action_space.high + env.action_space.low) / 2))
                 
-                self.transform = T.ComposeTransform(
-                    [T.TanhTransform(cache_size=1),
-                    T.AffineTransform(self.action_offset, self.action_scale, cache_size=1)],
-                    cache_size=1,
-                )
+                
             def forward(self, inputs: torch.Tensor, sample: bool):
                 # TODO: Perform the actor computation
                 # - First, pass the inputs through the first hidden layer
@@ -113,6 +109,11 @@ class Agent:
                 # Do not forget to support computation without sampling (`sample==False`). You
                 # can return for example `torch.tanh(mus) * self.action_scale + self.action_offset`,
                 # or you can use for example `sds=1e-7`.
+                self.transform = T.ComposeTransform(
+                    [T.TanhTransform(cache_size=1),
+                    T.AffineTransform(self.action_offset, self.action_scale, cache_size=1)],
+                    cache_size=1,
+                )
                 hidden_states = self.model(inputs)
                 mus = self.mus_layer(hidden_states)
                 sds = self.sds_layer(hidden_states)
