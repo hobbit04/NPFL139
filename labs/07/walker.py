@@ -326,10 +326,13 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
+        if np.mean(returns) > 210:
+            break
 
     # You can save the agent using:
-    #   agent.save_actor(args.model_path)
-    #   agent.save_args(args.model_path + ".json", args)
+    agent.save_actor(args.model_path)
+    agent.save_args(args.model_path + ".json", args)
+    print("model saved")
 
     # Final evaluation
     while True:
