@@ -1,0 +1,18 @@
+{
+  "env": "BipedalWalkerHardcore-v3",
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "batch_size": 256,
+  "envs": 8,
+  "evaluate_each": 1000,
+  "evaluate_for": 10,
+  "gamma": 0.999,
+  "hidden_layer_size": 256,
+  "learning_rate": 0.0003,
+  "model_path": "walker.pt",
+  "replay_buffer_size": 1000000,
+  "target_entropy": -1,
+  "target_tau": 0.005
+}

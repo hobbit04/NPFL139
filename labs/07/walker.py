@@ -15,19 +15,19 @@ npfl139.require_version("2526.7")
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
-parser.add_argument("--env", default="BipedalWalker-v3", type=str, help="Environment.")
+parser.add_argument("--env", default="BipedalWalkerHardcore-v3", type=str, help="Environment.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
-parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
 parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
 parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
-parser.add_argument("--gamma", default=0.999, type=float, help="Discounting factor.")
+parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=256, type=int, help="Size of hidden layer.")
-parser.add_argument("--learning_rate", default=3e-4, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="walker.pt", type=str, help="Model path")
 parser.add_argument("--replay_buffer_size", default=1_000_000, type=int, help="Replay buffer size")
 parser.add_argument("--target_entropy", default=-1, type=float, help="Target entropy per action component.")
@@ -53,10 +53,15 @@ class Agent:
                 self.model = torch.nn.Sequential(
                     torch.nn.Linear(env.observation_space.shape[0], hidden_layer_size),
                     torch.nn.ReLU(),
-                    torch.nn.LazyLinear(hidden_layer_size),
+                )
+                self.layer2 = torch.nn.Sequential(
+                    torch.nn.Linear(hidden_layer_size, hidden_layer_size),
                     torch.nn.ReLU(),
                 )
-
+                self.layer3 = torch.nn.Sequential(
+                    torch.nn.Linear(hidden_layer_size, hidden_layer_size),
+                    torch.nn.ReLU(),
+                )
                 self.mus_layer = torch.nn.Linear(hidden_layer_size, env.action_space.shape[0])
                 
                 self.sds_layer = torch.nn.Sequential(
@@ -115,6 +120,9 @@ class Agent:
                     cache_size=1,
                 )
                 hidden_states = self.model(inputs)
+                hidden_states += self.layer2(hidden_states)
+                hidden_states += self.layer3(hidden_states)
+
                 mus = self.mus_layer(hidden_states)
                 sds = self.sds_layer(hidden_states)
                 action_dist = torch.distributions.Normal(mus, sds)
@@ -327,8 +335,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        if np.mean(returns) > 210:
-            break
+        if np.mean(returns) > 110:
+            training = False
 
     # You can save the agent using:
     agent.save_actor(args.model_path)
