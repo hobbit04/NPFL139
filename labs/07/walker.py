@@ -310,6 +310,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             action = agent.predict_sampled_actions(state)
 
             next_state, reward, terminated, truncated, _ = vector_env.step(action)
+            if reward == -100:
+                reward = 0
             done = terminated | truncated
             replay_buffer.append_batch(Transition(state, action, reward, done, next_state))
             state = next_state
