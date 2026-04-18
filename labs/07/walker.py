@@ -24,7 +24,7 @@ parser.add_argument("--threads", default=1, type=int, help="Maximum number of th
 parser.add_argument("--batch_size", default=128, type=int, help="Batch size.")
 parser.add_argument("--envs", default=8, type=int, help="Environments.")
 parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate each number of updates.")
-parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate the given number of episodes.")
+parser.add_argument("--evaluate_for", default=20, type=int, help="Evaluate the given number of episodes.")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
 parser.add_argument("--hidden_layer_size", default=256, type=int, help="Size of hidden layer.")
 parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
@@ -311,6 +311,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
     state = vector_env.reset(seed=args.seed)[0]
     training = True
+    count = 0
     while training:
         # Training
         for _ in range(args.evaluate_each):
@@ -336,6 +337,10 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
         if np.mean(returns) > 110:
+            count += 1
+        else:
+            count = 0
+        if count >= 3:
             training = False
 
     # You can save the agent using:
