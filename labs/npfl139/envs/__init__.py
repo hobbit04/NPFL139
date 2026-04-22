@@ -7,3 +7,5 @@ from . import car_racing
 from . import cart_pole_pixels
 from . import memory_game
 from . import mountain_car
+from . import multi_collect
+from . import single_collect
