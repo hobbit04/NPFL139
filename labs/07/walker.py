@@ -315,6 +315,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     state = vector_env.reset(seed=args.seed)[0]
     training = True
     count = 0
+    agent.load_actor(args.model_path)
     while training:
         # Training
         for _ in range(args.evaluate_each):
@@ -339,7 +340,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
                 
         # Periodic evaluation
         returns = [evaluate_episode() for _ in range(args.evaluate_for)]
-        if np.mean(returns) > 110:
+        if np.mean(returns) > 210:
             count += 1
         else:
             count = 0
