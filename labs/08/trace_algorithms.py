@@ -66,6 +66,34 @@ def main(args: argparse.Namespace) -> np.ndarray:
     for _ in range(args.episodes):
         state, done = env.reset()[0], False
 
+        # Initialize trajectory buffers for this episode
+        traj_states, traj_actions, traj_action_probs = [], [], []
+        traj_rewards, traj_dones, traj_next_states = [], [], []
+
+        def update_at(t):
+            n_avail = min(args.n, len(traj_states) - t)
+            s_t = traj_states[t]
+            target_policy = compute_target_policy(V)
+            lam = args.trace_lambda if args.trace_lambda is not None else 1.0
+            G = V[s_t]
+            rho_prod = 1.0
+            gamma_lam_k = 1.0
+            for k in range(n_avail):
+                idx = t + k
+                if args.off_policy:
+                    rho_k = target_policy[traj_states[idx], traj_actions[idx]] / traj_action_probs[idx]
+                    if args.vtrace_clip is not None:
+                        rho_k = min(args.vtrace_clip, rho_k)
+                else:
+                    rho_k = 1.0
+                rho_prod *= rho_k
+                d_k = traj_dones[idx]
+                V_next = 0.0 if d_k else V[traj_next_states[idx]]
+                delta_k = traj_rewards[idx] + args.gamma * V_next - V[traj_states[idx]]
+                G += gamma_lam_k * rho_prod * delta_k
+                gamma_lam_k *= args.gamma * lam
+            V[s_t] += args.alpha * (G - V[s_t])
+
         # Generate episode and update V using the given TD method
         while not done:
             best_action = argmax_with_tolerance(R[state] + (1 - D[state]) * args.gamma * V[N[state]])
@@ -103,8 +131,21 @@ def main(args: argparse.Namespace) -> np.ndarray:
             # in the order in which you encountered the states in the trajectory
             # and during these updates, use the `compute_target_policy(V)` with
             # the up-to-date value of `V`.
+            traj_states.append(state)
+            traj_actions.append(action)
+            traj_action_probs.append(action_prob)
+            traj_rewards.append(reward)
+            traj_dones.append(done)
+            traj_next_states.append(next_state)
+
+            t_update = len(traj_states) - args.n
+            if t_update >= 0:
+                update_at(t_update)
 
             state = next_state
+
+        for t in range(max(0, len(traj_states) - args.n + 1), len(traj_states)):
+            update_at(t)
 
     return V
 

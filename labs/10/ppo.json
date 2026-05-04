@@ -1,0 +1,19 @@
+{
+  "env": "npfl139/SingleCollect-v0",
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "batch_size": 64,
+  "clip_epsilon": 0.2,
+  "entropy_regularization": 0.01,
+  "envs": 8,
+  "epochs": 5,
+  "evaluate_each": 20,
+  "evaluate_for": 20,
+  "gamma": 0.999,
+  "hidden_layer_size": 64,
+  "learning_rate": 0.0003,
+  "trace_lambda": 0.95,
+  "worker_steps": 128
+}
