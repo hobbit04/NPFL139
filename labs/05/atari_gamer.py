@@ -83,7 +83,7 @@ class Agent:
         
         action_prob = torch.distributions.Categorical(logits=action_logit)
         log_prob = action_prob.log_prob(torch.tensor(action, device=self.device))
-        actor_loss = -log_prob * advantage
+        actor_loss = -log_prob * advantage.detatch()
 
         total_loss = critic_loss + actor_loss
 
@@ -184,8 +184,6 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
             total_reward += reward
             state = torch.tensor(next_state).unsqueeze(0)
-
-        print(f"Episode {episode + 1}/{args.max_episode}  reward: {total_reward:.1f}")
 
     # Save the agent
     agent.save_actor(model_path)
