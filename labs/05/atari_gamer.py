@@ -71,7 +71,9 @@ class Agent:
         return (action_logit, critic)
 
     def train(self, state, action, reward, done, next_state):
+        # print("train called")  # 임시 확인용
         state = self._preprocess(state).to(self.device)
+        next_state = self._preprocess(next_state)
         # Advantage 계산
         action_logit, value = self.forward(state)
         with torch.no_grad():
@@ -86,6 +88,7 @@ class Agent:
         actor_loss = -log_prob * advantage.detach()
 
         total_loss = critic_loss + actor_loss
+        # print(f"actor_loss: {actor_loss.item():.4f}, critic_loss: {critic_loss.item():.4f}")
 
         # 한번에 optimizer로 업데이트
         self._optimizer.zero_grad()
@@ -182,6 +185,7 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
             done = terminated | truncated
             agent.train(state, action, reward, done, next_state)
 
+            # print(action_prob)  # 매번 같은 분포인지 확인
             total_reward += reward
             state = torch.tensor(next_state).unsqueeze(0)
 
