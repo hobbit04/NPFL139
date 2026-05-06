@@ -2,6 +2,8 @@
 import argparse
 import json
 
+import re
+
 import ale_py
 import gymnasium as gym
 gym.register_envs(ale_py)
@@ -24,10 +26,13 @@ parser.add_argument("--frame_stack", default=4, type=int, help="Frame stack.")
 parser.add_argument("--game", default="Pong", type=str, help="Game to play.")
 parser.add_argument("--grayscale", default=True, action=argparse.BooleanOptionalAction, help="Grayscale obs.")
 parser.add_argument("--screen_size", default=84, type=int, help="Screen size.")
-parser.add_argument("--max_episode", default=200, type=int, help="Number of episodes for training")
+parser.add_argument("--max_episode", default=50000, type=int, help="Number of vectorized training steps")
 parser.add_argument("--cnn_hidden", default=64, type=int, help="Size of a cnn layer")
-parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate")
+parser.add_argument("--lr", default=2.5e-4, type=float, help="Learning rate")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discount factor")
+parser.add_argument("--envs", default=16, type=int, help="Number of parallel environments.")
+parser.add_argument("--evaluate_each", default=1000, type=int, help="Evaluate every N steps.")
+parser.add_argument("--evaluate_for", default=5, type=int, help="Number of episodes for evaluation.")
 
 class Agent:
     device = torch.device(torch.accelerator.current_accelerator() if torch.accelerator.is_available() else "cpu")
@@ -70,46 +75,43 @@ class Agent:
 
         return (action_logit, critic)
 
-    def train(self, state, action, reward, done, next_state):
-        # print("train called")  # 임시 확인용
-        state = self._preprocess(state).to(self.device)
-        next_state = self._preprocess(next_state)
-        # Advantage 계산
-        action_logit, value = self.forward(state)
+    @npfl139.typed_torch_function(device, torch.float32, torch.int64, torch.float32, torch.float32, torch.float32)
+    def train(self, states: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, dones: torch.Tensor, next_states: torch.Tensor) -> None:
+        states = self._preprocess(states)
+        next_states = self._preprocess(next_states)
+
+        action_logits, values = self.forward(states)
+        values = values.squeeze(-1)
+
         with torch.no_grad():
-            next_value = self.predict_value(next_state[np.newaxis]).item() if not done else 0.0
-        advantage = (reward + self.args.gamma * next_value) - value
-        
-        # loss 계산
-        critic_loss = advantage ** 2
-        
-        action_prob = torch.distributions.Categorical(logits=action_logit)
-        log_prob = action_prob.log_prob(torch.tensor(action, device=self.device))
-        actor_loss = -log_prob * advantage.detach()
+            next_values = self._critic(self._backbone(next_states)).squeeze(-1)
+
+        advantages = (rewards + self.args.gamma * next_values * (1 - dones)) - values
+
+        critic_loss = (advantages ** 2).mean()
+        dist = torch.distributions.Categorical(logits=action_logits)
+        actor_loss = -(dist.log_prob(actions) * advantages.detach()).mean()
 
         total_loss = critic_loss + actor_loss
-        # print(f"actor_loss: {actor_loss.item():.4f}, critic_loss: {critic_loss.item():.4f}")
 
-        # 한번에 optimizer로 업데이트
+        torch.nn.utils.clip_grad_norm_(
+            list(self._backbone.parameters()) + list(self._actor.parameters()) + list(self._critic.parameters()), 
+            max_norm=0.5
+        )
         self._optimizer.zero_grad()
         total_loss.backward()
         self._optimizer.step()
 
-    # Below is the code from 06/paac.py with slight modification
     @npfl139.typed_torch_function(device, torch.float32)
-    def predict_action(self, state: torch.Tensor) -> np.ndarray:
-        # TODO: Return predicted action probabilities.
-        state = self._preprocess(state)
-        x = self._backbone(state)
-        logit = self._actor(x)
-        return torch.softmax(logit, dim=-1).squeeze(0)
+    def predict_actions(self, states: torch.Tensor) -> np.ndarray:
+        states = self._preprocess(states)
+        x = self._backbone(states)
+        return torch.softmax(self._actor(x), dim=-1)
 
     @npfl139.typed_torch_function(device, torch.float32)
-    def predict_value(self, state: torch.Tensor) -> int:
-        # TODO: Return estimates of the value function.
-        # state = self._preprocess(state)
-        x = self._backbone(state)
-        return self._critic(x)
+    def predict_values(self, states: torch.Tensor) -> np.ndarray:
+        x = self._backbone(states)
+        return self._critic(x).squeeze(-1)
 
     # Serialization methods.
     def save_actor(self, path: str) -> None:
@@ -142,52 +144,45 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
 
     agent = Agent(env, args if not args.recodex else Agent.load_args(model_path + ".json"))
 
-    # Assuming you have pre-trained your agent locally, perform only evaluation in ReCodEx
-    if args.recodex:
-        # TODO: Load the agent
-        agent.load_actor(model_path)
-        # Final evaluation
-        while True:
-            state, done = env.reset(options={"start_evaluation": True})[0], False
-            state = torch.tensor(state).unsqueeze(0)
-            while not done:
-                # TODO: Choose a greedy action
-                prob = agent.predict_action(state)
-                action = np.argmax(prob)
-                state, reward, terminated, truncated, _ = env.step(action)
-                state = torch.tensor(state).unsqueeze(0)
-                done = terminated or truncated
-
-    # TODO: Train an agent using for example some distributed-RL algorithm.
-    #
-    # If you want to create N multithreaded parallel environments, use
-    #   vector_env = ale_py.AtariVectorEnv(
-    #       game=re.sub(r"(?<=[a-z])(?=[A-Z])", "_", args.game).lower(),  # use snake_case for the game name
-    #       num_envs=N,  # the requred number of parallel environments,
-    #       frameskip=args.frame_skip, stack_num=args.frame_stack, grayscale=args.grayscale,
-    #       img_height=args.screen_size, img_width=args.screen_size,
-    #       use_fire_reset=False, reward_clipping=False, repeat_action_probability=0.25,
-    #       autoreset_mode=gym.vector.AutoresetMode.NEXT_STEP,
-    #   )
-    #
-    # There are several Autoreset modes available, see https://farama.org/Vector-Autoreset-Mode.
-    # In some situations, the SAME_STEP might be more practical than the default NEXT_STEP mode.
-    for episode in range(args.max_episode):
-        state, done = env.reset()[0], False
-        state = torch.tensor(state).unsqueeze(0)
+    def evaluate_episode(start_evaluation: bool = False) -> float:
+        state, done = env.reset(options={"start_evaluation": start_evaluation})[0], False
         total_reward = 0
-
         while not done:
-            action_prob = agent.predict_action(state)
-            action = np.random.choice(len(action_prob), p=action_prob)
-
-            next_state, reward, terminated, truncated, _ = env.step(action)
-            done = terminated | truncated
-            agent.train(state, action, reward, done, next_state)
-
-            # print(action_prob)  # 매번 같은 분포인지 확인
+            action = np.argmax(agent.predict_actions([state])[0])
+            state, reward, terminated, truncated, _ = env.step(action)
             total_reward += reward
-            state = torch.tensor(next_state).unsqueeze(0)
+            done = terminated or truncated
+        return total_reward
+
+    if args.recodex:
+        agent.load_actor(model_path)
+        while True:
+            evaluate_episode(start_evaluation=True)
+
+    # Create vectorized environment for training
+    vector_env = ale_py.AtariVectorEnv(
+        game=re.sub(r"(?<=[a-z])(?=[A-Z])", "_", args.game).lower(),
+        num_envs=args.envs,
+        frameskip=args.frame_skip, stack_num=args.frame_stack, grayscale=args.grayscale,
+        img_height=args.screen_size, img_width=args.screen_size,
+        use_fire_reset=False, reward_clipping=False, repeat_action_probability=0.25,
+        autoreset_mode=gym.vector.AutoresetMode.NEXT_STEP,
+    )
+    states = vector_env.reset(seed=args.seed)[0]
+
+    for step in range(args.max_episode):
+        probs = agent.predict_actions(states)
+        actions = np.array([np.random.choice(len(p), p=p) for p in probs])
+
+        next_states, rewards, terminated, truncated, _ = vector_env.step(actions)
+        dones = (terminated | truncated).astype(np.float32)
+
+        agent.train(states, actions, rewards, dones, next_states)
+        states = next_states
+
+        if (step + 1) % args.evaluate_each == 0:
+            ep_returns = [evaluate_episode() for _ in range(args.evaluate_for)]
+            print(f"Step {step + 1}/{args.max_episode}, mean return: {np.mean(ep_returns):.1f}")
 
     # Save the agent
     agent.save_actor(model_path)
