@@ -83,7 +83,7 @@ class Agent:
         
         action_prob = torch.distributions.Categorical(logits=action_logit)
         log_prob = action_prob.log_prob(torch.tensor(action, device=self.device))
-        actor_loss = -log_prob * advantage.detatch()
+        actor_loss = -log_prob * advantage.detach()
 
         total_loss = critic_loss + actor_loss
 
