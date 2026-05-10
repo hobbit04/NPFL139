@@ -1,0 +1,20 @@
+{
+  "recodex": false,
+  "render_each": 0,
+  "seed": null,
+  "threads": 1,
+  "frame_skip": 4,
+  "frame_stack": 4,
+  "game": "Pong",
+  "grayscale": true,
+  "screen_size": 84,
+  "max_episode": 500000,
+  "entropy_coef": 0.01,
+  "nsteps": 5,
+  "cnn_hidden": 64,
+  "lr": 0.00025,
+  "gamma": 0.99,
+  "envs": 16,
+  "evaluate_each": 1000,
+  "evaluate_for": 5
+}

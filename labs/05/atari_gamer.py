@@ -26,7 +26,9 @@ parser.add_argument("--frame_stack", default=4, type=int, help="Frame stack.")
 parser.add_argument("--game", default="Pong", type=str, help="Game to play.")
 parser.add_argument("--grayscale", default=True, action=argparse.BooleanOptionalAction, help="Grayscale obs.")
 parser.add_argument("--screen_size", default=84, type=int, help="Screen size.")
-parser.add_argument("--max_episode", default=50000, type=int, help="Number of vectorized training steps")
+parser.add_argument("--max_episode", default=500000, type=int, help="Number of vectorized training steps")
+parser.add_argument("--entropy_coef", default=0.01, type=float, help="Entropy regularization coefficient")
+parser.add_argument("--nsteps", default=5, type=int, help="N-step return length")
 parser.add_argument("--cnn_hidden", default=64, type=int, help="Size of a cnn layer")
 parser.add_argument("--lr", default=2.5e-4, type=float, help="Learning rate")
 parser.add_argument("--gamma", default=0.99, type=float, help="Discount factor")
@@ -75,43 +77,43 @@ class Agent:
 
         return (action_logit, critic)
 
-    @npfl139.typed_torch_function(device, torch.float32, torch.int64, torch.float32, torch.float32, torch.float32)
-    def train(self, states: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor, dones: torch.Tensor, next_states: torch.Tensor) -> None:
+    @npfl139.typed_torch_function(device, torch.float32, torch.int64, torch.float32)
+    def train(self, states: torch.Tensor, actions: torch.Tensor, returns: torch.Tensor) -> None:
         states = self._preprocess(states)
-        next_states = self._preprocess(next_states)
 
         action_logits, values = self.forward(states)
         values = values.squeeze(-1)
 
-        with torch.no_grad():
-            next_values = self._critic(self._backbone(next_states)).squeeze(-1)
-
-        advantages = (rewards + self.args.gamma * next_values * (1 - dones)) - values
+        advantages = returns - values
 
         critic_loss = (advantages ** 2).mean()
         dist = torch.distributions.Categorical(logits=action_logits)
         actor_loss = -(dist.log_prob(actions) * advantages.detach()).mean()
+        entropy_loss = -dist.entropy().mean()
 
-        total_loss = critic_loss + actor_loss
+        total_loss = 0.5 * critic_loss + actor_loss + self.args.entropy_coef * entropy_loss
 
-        torch.nn.utils.clip_grad_norm_(
-            list(self._backbone.parameters()) + list(self._actor.parameters()) + list(self._critic.parameters()), 
-            max_norm=0.5
-        )
         self._optimizer.zero_grad()
         total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self._backbone.parameters()) + list(self._actor.parameters()) + list(self._critic.parameters()),
+            max_norm=0.5
+        )
         self._optimizer.step()
 
     @npfl139.typed_torch_function(device, torch.float32)
     def predict_actions(self, states: torch.Tensor) -> np.ndarray:
-        states = self._preprocess(states)
-        x = self._backbone(states)
-        return torch.softmax(self._actor(x), dim=-1)
+        with torch.no_grad():
+            states = self._preprocess(states)
+            x = self._backbone(states)
+            return torch.softmax(self._actor(x), dim=-1)
 
     @npfl139.typed_torch_function(device, torch.float32)
     def predict_values(self, states: torch.Tensor) -> np.ndarray:
-        x = self._backbone(states)
-        return self._critic(x).squeeze(-1)
+        with torch.no_grad():
+            states = self._preprocess(states)
+            x = self._backbone(states)
+            return self._critic(x).squeeze(-1)
 
     # Serialization methods.
     def save_actor(self, path: str) -> None:
@@ -170,6 +172,8 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
     )
     states = vector_env.reset(seed=args.seed)[0]
 
+    rollout_states, rollout_actions, rollout_rewards, rollout_dones = [], [], [], []
+
     for step in range(args.max_episode):
         probs = agent.predict_actions(states)
         actions = np.array([np.random.choice(len(p), p=p) for p in probs])
@@ -177,8 +181,31 @@ def main(env: npfl139.EvaluationEnv, args: argparse.Namespace) -> None:
         next_states, rewards, terminated, truncated, _ = vector_env.step(actions)
         dones = (terminated | truncated).astype(np.float32)
 
-        agent.train(states, actions, rewards, dones, next_states)
+        rollout_states.append(states.copy())
+        rollout_actions.append(actions.copy())
+        rollout_rewards.append(rewards.copy())
+        rollout_dones.append(dones.copy())
+
         states = next_states
+
+        if len(rollout_states) == args.nsteps:
+            # Compute n-step returns by bootstrapping from V(s_{t+n})
+            G = agent.predict_values(next_states)
+            returns = np.zeros((args.nsteps, args.envs), dtype=np.float32)
+            for t in reversed(range(args.nsteps)):
+                G = rollout_rewards[t] + args.gamma * G * (1 - rollout_dones[t])
+                returns[t] = G
+
+            states_flat = np.stack(rollout_states).reshape(-1, *rollout_states[0].shape[1:])
+            actions_flat = np.stack(rollout_actions).reshape(-1)
+            returns_flat = returns.reshape(-1)
+
+            agent.train(states_flat, actions_flat, returns_flat)
+
+            rollout_states.clear()
+            rollout_actions.clear()
+            rollout_rewards.clear()
+            rollout_dones.clear()
 
         if (step + 1) % args.evaluate_each == 0:
             ep_returns = [evaluate_episode() for _ in range(args.evaluate_for)]
