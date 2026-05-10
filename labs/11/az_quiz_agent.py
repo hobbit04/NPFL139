@@ -82,7 +82,7 @@ class Agent:
         # - a value head, which again uses 3x3 convolution to reduce the number of channels
         #   to 2, flattens, and produces expected return using an output dense layer with
         #   `tanh` activation.
-        self._model = self.Network(args=args)
+        self._model = self.Network(args=args).to(device=self.device)
         self._optimizer = torch.optim.Adam(
             self._model.parameters(), 
             lr=args.learning_rate,
