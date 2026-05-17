@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import collections
+import copy
 
 import numpy as np
 import torch
@@ -17,17 +18,17 @@ parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--alpha", default=0.3, type=float, help="MCTS root Dirichlet alpha")
-parser.add_argument("--batch_size", default=256, type=int, help="Number of game positions to train on.")
+parser.add_argument("--batch_size", default=128, type=int, help="Number of game positions to train on.")
 parser.add_argument("--epsilon", default=0.25, type=float, help="MCTS exploration epsilon in root")
 parser.add_argument("--evaluate_each", default=1, type=int, help="Evaluate each number of iterations.")
-parser.add_argument("--learning_rate", default=0.001, type=float, help="Learning rate.")
+parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
 parser.add_argument("--model_path", default="az_quiz.pt", type=str, help="Model path")
-parser.add_argument("--num_simulations", default=50, type=int, help="Number of simulations in one MCTS.")
+parser.add_argument("--num_simulations", default=100, type=int, help="Number of simulations in one MCTS.")
 parser.add_argument("--replay_buffer_length", default=50_000, type=int, help="Replay buffer max length.")
-parser.add_argument("--sampling_moves", default=10, type=int, help="Sampling moves.")
+parser.add_argument("--sampling_moves", default=8, type=int, help="Sampling moves.")
 parser.add_argument("--show_sim_games", default=False, action="store_true", help="Show simulated games.")
-parser.add_argument("--sim_games", default=50, type=int, help="Simulated games to generate in every iteration.")
-parser.add_argument("--train_for", default=20, type=int, help="Update steps in every iteration.")
+parser.add_argument("--sim_games", default=100, type=int, help="Simulated games to generate in every iteration.")
+parser.add_argument("--train_for", default=100, type=int, help="Update steps in every iteration.")
 parser.add_argument("--filters", default=16, type=int, help="Number of filters in CNN backbone")
 parser.add_argument("--weight_decay", default=1e-4, type=float, help="L2 Norm parameter")
 
@@ -183,13 +184,17 @@ class MCTNode:
         #   new `MCTNodes` with the priors from the policy predicted
         #   by the network.
         if game.outcome() is not None:
-            value = -1.0 if game.outcome() == game.Outcome.WIN else 1.0
+            value = 1.0 if game.outcome() == game.Outcome.WIN else -1.0
         else:
             # 신경망으로 (p, v) 계산
             policy, value = agent.predict(agent.board_features(game))
             # valid action에 대해서만 자식 노드 생성
-            for action in game.valid_actions():
-                self.children[action] = MCTNode(prior=policy[action]) 
+
+            valid_actions = game.valid_actions()
+            valid_priors = np.array([float(policy[a]) for a in valid_actions])
+            valid_priors /= valid_priors.sum()  # renormalize over valid actions only
+            for i, action in enumerate(valid_actions):
+                self.children[action] = MCTNode(prior=valid_priors[i])
 
         self.total_value = value
         self.visit_count = 1
@@ -256,22 +261,24 @@ def mcts(game: AZQuiz, agent: Agent, args: argparse.Namespace, explore: bool) ->
             # the `game` from its parent and performing a suitable action.
             parent = mcts_path[-2]
             
-            game = parent.game.clone()
-            game.move(parent_action)
-            node.evaluate(game, agent)
+            cloned_game = parent.game.clone()
+            cloned_game.move(parent_action)
+            node.evaluate(cloned_game, agent)
             
 
         else:
             # TODO: If the node has been evaluated but has no children, the
             # game ends in this node. Update it appropriately.
-            pass
+            node.total_value += node.value()  # keeps the average the same
+            node.visit_count += 1
+
 
         # Get the value of the node.
         value = node.value()
 
         # TODO: For all parents of the `node`, update their value estimate,
         # i.e., the `visit_count` and `total_value`.
-        for parent_node in mcts_path:  # 순서는 상관 없음
+        for parent_node in reversed(mcts_path[:-1]): 
             value = -value
             parent_node.total_value += value
             parent_node.visit_count += 1
@@ -333,16 +340,19 @@ def sim_game(agent: Agent, args: argparse.Namespace) -> list[ReplayBufferEntry]:
 def train(args: argparse.Namespace) -> Agent:
     # Perform training
     agent = Agent(args)
+    best_agent = copy.deepcopy(agent)
     replay_buffer = npfl139.ReplayBuffer(max_length=args.replay_buffer_length)
 
     iteration = 0
+    consecutive_pass = 0
+    minimum_play = 130
     training = True
     while training:
         iteration += 1
 
-        # Generate simulated games
+        # Generate simulated games using best model for stable training data
         for _ in range(args.sim_games):
-            game = sim_game(agent, args)
+            game = sim_game(best_agent, args)
             replay_buffer.extend(game)
 
             # If required, show the generated game, as 8 very long lines showing
@@ -376,21 +386,39 @@ def train(args: argparse.Namespace) -> Agent:
 
         # Evaluate
         if iteration % args.evaluate_each == 0:
+            # Self-play: current agent vs best agent (AlphaZero-style)
+            self_score = npfl139.board_games.evaluate(
+                AZQuiz, [Player(agent, argparse.Namespace(num_simulations=args.num_simulations)),
+                         Player(best_agent, argparse.Namespace(num_simulations=args.num_simulations))],
+                games=56, first_chosen=False, render=False, verbose=False,
+            )
+            print(f"Self-play vs best: {100 * self_score:.1f}%")
+
+            # Replace best model if current wins more than 55%
+            if self_score > 0.55:
+                best_agent = copy.deepcopy(agent)
+                print("Best model updated.")
+
             # Run an evaluation on 2*56 games versus the simple heuristics,
             # using the `Player` instance defined below.
             # For speed, the implementation does not use MCTS during evaluation,
             # but you can of course change it so that it does.
             score = npfl139.board_games.evaluate(
-                AZQuiz, [Player(agent, argparse.Namespace(num_simulations=0)),
+                AZQuiz, [Player(best_agent, argparse.Namespace(num_simulations=args.num_simulations)),
                          AZQuiz.player_from_name("simple_heuristic")(seed=main_args.seed)],
                 games=56, first_chosen=False, render=False, verbose=False,
             )
             print(f"Evaluation after iteration {iteration}: {100 * score:.1f}%", flush=True)
-            if score > 0.9:
-                print("Score passed 90%. Saving the model..")
-                training = False
-    agent.save(args.model_path)
-    return agent
+            if iteration > minimum_play and score >= 0.99:
+                consecutive_pass += 1
+                if consecutive_pass >= 6:  # 3회 연속 99% 이상
+                    print("Converged. Saving best model.")
+                    training = False
+            else:
+                consecutive_pass = 0
+
+    best_agent.save(args.model_path)
+    return best_agent
 
 
 #############################
