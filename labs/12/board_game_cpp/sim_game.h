@@ -39,6 +39,41 @@ class SimGame {
         // however, `mcts` wants a function pointer as the `Evaluator<G>`, so you need to use
         // `std::bind_front(&SimGame::worker_evaluator, this)` as the second argument of `mcts`.
 
+        G game;
+        int move_count = 0;
+        Evaluator<G> worker_eval{std::bind_front(&SimGame::worker_evaluator, this)};
+
+        while (!game.outcome()) {
+          history->emplace_back(game, Policy<G>{}, 0.0f);
+          auto& [state, pol, val] = history->back();
+
+          ::mcts(game, worker_eval, num_simulations, epsilon, alpha, pol);
+
+          // Select action: sample for early moves, greedy afterwards.
+          int action = -1;
+          if (move_count < sampling_moves) {
+            float r = std::uniform_real_distribution<float>(0.0f, 1.0f)(*board_game_generator);
+            float cumsum = 0.0f;
+            for (int a = 0; a < G::ACTIONS; a++) {
+              if (pol[a] > 0.0f) {
+                cumsum += pol[a];
+                if (r < cumsum) { action = a; break; }
+              }
+            }
+          }
+          if (action < 0)
+            action = (int)(std::max_element(pol.begin(), pol.end()) - pol.begin());
+
+          game.move(action);
+          move_count++;
+        }
+
+        // Fill in the game outcome for each recorded state.
+        for (auto& [state, pol, outcome] : *history) {
+          Outcome result = game.outcome(state.to_play);
+          outcome = (result == Outcome::WIN) ? 1.0f : (result == Outcome::LOSS) ? -1.0f : 0.0f;
+        }
+
         // Once the whole game is finished, we pass it to processor to return it.
         {
           std::unique_lock processor_lock{processor_mutex};
